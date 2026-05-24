@@ -1,0 +1,33 @@
+# OS
+.DS_Store
+
+# Claude Code локальные настройки
+.claude/
+
+# Любые .env и секреты (защита от любого подкаталога)
+**/.env
+**/.env.local
+**/.flask_secret
+
+# Python engine
+tenderbot-engine/venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+tenderbot-engine/db/*.db
+tenderbot-engine/db/*.db-journal
+tenderbot-engine/logs/
+tenderbot-engine/tools/
+tenderbot-engine/docs/*.pdf
+tenderbot-engine/docs/*.docx
+
+# Web (Next.js)
+web/node_modules/
+web/.next/
+web/.vercel/
+web/next-env.d.ts
+
+# IDE
+.vscode/
+.idea/
+*.swp

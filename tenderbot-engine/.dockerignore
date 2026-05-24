@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+tools/
+logs/
+db/*.db
+db/*.db-journal
+.env
+.flask_secret
+.git/
+.DS_Store
+docs/*.pdf
+docs/*.docx
