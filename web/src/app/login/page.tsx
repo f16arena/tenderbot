@@ -79,8 +79,8 @@ function LoginInner() {
                 value={email} onChange={(e) => setEmail(e.target.value)}
                 className={inputCls} />
             </Field>
-            <Field label="Пароль (≥6 символов)">
-              <input type="password" required minLength={6}
+            <Field label="Пароль (≥8 символов)">
+              <input type="password" required minLength={8}
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 value={password} onChange={(e) => setPassword(e.target.value)}
                 className={inputCls} />

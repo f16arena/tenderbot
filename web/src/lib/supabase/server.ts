@@ -1,5 +1,6 @@
 // Серверный Supabase-клиент для Server Components, Route Handlers, Server Actions.
 // Использует cookies для сессии — Supabase SSR.
+import "server-only"; // не позволит этому модулю попасть в client-bundle
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 

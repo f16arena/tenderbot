@@ -14,9 +14,13 @@ type TgUpdate = {
 };
 
 export async function POST(req: Request) {
-  // защита secret-токеном (Telegram шлёт его в X-Telegram-Bot-Api-Secret-Token)
+  // защита secret-токеном (Telegram шлёт его в X-Telegram-Bot-Api-Secret-Token).
+  // Deny by default — если переменная не задана, webhook не активен (предотвращает спам/инъекции).
   const expected = process.env.TELEGRAM_WEBHOOK_SECRET;
-  if (expected && req.headers.get("x-telegram-bot-api-secret-token") !== expected) {
+  if (!expected) {
+    return NextResponse.json({ error: "webhook_secret_missing" }, { status: 503 });
+  }
+  if (req.headers.get("x-telegram-bot-api-secret-token") !== expected) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

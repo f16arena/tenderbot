@@ -140,11 +140,15 @@ alter table public.sent_notifications    enable row level security;
 alter table public.lots                  enable row level security;
 alter table public.plans                 enable row level security;
 
--- профили
+-- профили: SELECT/UPDATE свои; INSERT — только триггер handle_new_user (security definer обходит RLS).
 create policy "profiles select own"  on public.profiles for select using (auth.uid() = id);
 create policy "profiles update own"  on public.profiles for update using (auth.uid() = id);
+-- INSERT-policy на случай ручного создания через service_role (не блокирующая, для прозрачности).
+create policy "profiles insert self" on public.profiles for insert with check (auth.uid() = id);
 
--- подписки (read-only с клиента; меняет только admin/server)
+-- подписки: клиент только смотрит свои; ВСЕ изменения (триал, оплата, продление) — через service_role
+-- из defined-функций (handle_new_user, /api/cron, /api/payment-webhook). Никакого INSERT/UPDATE/DELETE
+-- от лица клиента — это защищает от self-upgrade без оплаты.
 create policy "subs select own" on public.subscriptions for select using (auth.uid() = user_id);
 
 -- фильтры — полный CRUD под своими
