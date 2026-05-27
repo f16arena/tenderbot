@@ -20,9 +20,7 @@ function LoginInner() {
   const [mode, setMode] = useState<"login" | "signup">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [company, setCompany] = useState("");
-  const [bin, setBin] = useState("");
-  const [phone, setPhone] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
   const supabase = createClient();
@@ -30,15 +28,16 @@ function LoginInner() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
+    if (mode === "signup" && !agreed) {
+      setErr("Подтвердите согласие с офертой и политикой");
+      return;
+    }
     setLoading(true);
     try {
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email, password,
-          options: {
-            data: { full_name: "", company, bin, phone },
-            emailRedirectTo: `${location.origin}/app`,
-          },
+          options: { emailRedirectTo: `${location.origin}/app` },
         });
         if (error) throw error;
         const { data: { session } } = await supabase.auth.getSession();
@@ -55,8 +54,25 @@ function LoginInner() {
       setErr(
         msg.includes("Invalid login") ? "Неверный email или пароль" :
         msg.includes("already registered") ? "Этот email уже зарегистрирован" :
+        msg.includes("Email not confirmed") ? "Подтвердите email — мы отправили письмо со ссылкой" :
         msg
       );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function forgotPassword() {
+    if (!email) { setErr("Введите email — на него придёт ссылка для сброса"); return; }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${location.origin}/login`,
+      });
+      if (error) throw error;
+      setErr("✅ Письмо со ссылкой для сброса пароля отправлено на " + email);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Ошибка");
     } finally {
       setLoading(false);
     }
@@ -86,26 +102,35 @@ function LoginInner() {
                 className={inputCls} />
             </Field>
             {mode === "signup" && (
-              <>
-                <Field label="Компания (опционально)">
-                  <input value={company} onChange={(e) => setCompany(e.target.value)}
-                    placeholder="ТОО ..." className={inputCls} />
-                </Field>
-                <Field label="БИН (опционально)">
-                  <input value={bin} onChange={(e) => setBin(e.target.value)}
-                    className={inputCls} />
-                </Field>
-                <Field label="Телефон (опционально)">
-                  <input value={phone} onChange={(e) => setPhone(e.target.value)}
-                    placeholder="+7..." className={inputCls} />
-                </Field>
-              </>
+              <label className="flex items-start gap-2 text-xs text-slate-400 cursor-pointer">
+                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
+                  className="mt-0.5 accent-blue-500" />
+                <span>
+                  Я согласен с{" "}
+                  <Link href="/offer" target="_blank" className="text-blue-400 hover:underline">офертой</Link>
+                  {" "}и{" "}
+                  <Link href="/privacy" target="_blank" className="text-blue-400 hover:underline">политикой персональных данных</Link>
+                </span>
+              </label>
             )}
-            {err && <div className="text-sm text-red-400">{err}</div>}
+            {mode === "login" && (
+              <div className="text-right">
+                <button type="button" onClick={forgotPassword}
+                  className="text-xs text-blue-400 hover:underline">
+                  Забыли пароль?
+                </button>
+              </div>
+            )}
+            {err && <div className={`text-sm ${err.startsWith("✅") ? "text-green-400" : "text-red-400"}`}>{err}</div>}
             <button type="submit" disabled={loading}
               className="w-full mt-2 px-4 py-2.5 rounded-lg bg-blue-500 hover:bg-blue-400 disabled:opacity-50 font-semibold">
-              {loading ? "..." : mode === "signup" ? "Создать и начать триал" : "Войти"}
+              {loading ? "..." : mode === "signup" ? "Начать бесплатно — 7 дней" : "Войти"}
             </button>
+            {mode === "signup" && (
+              <p className="text-xs text-slate-500 text-center mt-2">
+                Реквизиты компании заполните после первого захода
+              </p>
+            )}
           </form>
           <div className="mt-4 text-center text-sm text-slate-400">
             {mode === "signup" ? (

@@ -2,6 +2,7 @@
 // Клиентская часть кабинета: вкладки, CRUD фильтров, отображение лотов.
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 
 type Filter = {
@@ -73,6 +74,9 @@ export default function AppClient({
   const [lots, setLots] = useState<Lot[]>([]);
   const [editing, setEditing] = useState<Filter | null>(null);
   const [showModal, setShowModal] = useState(false);
+
+  // Onboarding-wizard: показываем, если у пользователя ещё нет ни одного фильтра
+  const [showOnboarding, setShowOnboarding] = useState(initialFilters.length === 0);
 
   const loadLots = useCallback(async () => {
     const enabled = filters.filter(f => f.enabled);
@@ -190,23 +194,25 @@ export default function AppClient({
               </div>
             )}
             {lots.map(l => (
-              <div key={l.lot_id} className="rounded-2xl border border-slate-800 p-4 flex flex-col gap-2.5"
+              <Link key={l.lot_id} href={`/app/lots/${l.lot_id}`}
+                className="rounded-2xl border border-slate-800 p-4 flex flex-col gap-2.5 hover:border-slate-600 transition-colors group"
                 style={{ background: "#131a2b" }}>
                 <div className="flex justify-between gap-2.5">
                   <span className="text-xs px-2 py-0.5 rounded-full border border-blue-500/40 text-blue-400">{l.category || "—"}</span>
                   <span className="text-xs px-2 py-0.5 rounded-full border border-slate-700 text-slate-400">{PLATFORM_NAMES[l.platform] || l.platform}</span>
                 </div>
-                <h4 className="text-sm font-semibold leading-snug">{l.title || "Без названия"}</h4>
+                <h4 className="text-sm font-semibold leading-snug group-hover:text-blue-300 transition-colors">
+                  {l.title || "Без названия"}
+                </h4>
                 <div className="flex flex-wrap gap-2 text-xs text-slate-400">
                   <span>📍 {l.region || "—"}</span>
                   <span>⏱ {l.deadline ? new Date(l.deadline).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</span>
                 </div>
-                <div className="text-xl font-bold text-green-400">{priceFmt(l.price)}</div>
-                <a href={l.url || "#"} target="_blank" rel="noreferrer"
-                  className="px-3 py-1.5 rounded-lg border border-slate-700 text-center text-sm hover:border-slate-500">
-                  🔗 Открыть на площадке
-                </a>
-              </div>
+                <div className="text-xl font-bold text-green-400 mt-auto">{priceFmt(l.price)}</div>
+                <div className="text-xs text-slate-500 group-hover:text-blue-400 transition-colors">
+                  Подробнее →
+                </div>
+              </Link>
             ))}
           </div>
         )}
@@ -261,13 +267,7 @@ export default function AppClient({
           </div>
         )}
 
-        {tab === "channels" && (
-          <div className="text-center text-slate-500 py-16 rounded-2xl border border-slate-800"
-            style={{ background: "#131a2b" }}>
-            📨 Привязка Telegram/Email будет добавлена в Фазе 2 (после деплоя).<br />
-            Сейчас лоты доступны во вкладке «Мои лоты».
-          </div>
-        )}
+        {tab === "channels" && <ChannelsTab />}
 
         {tab === "billing" && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -299,7 +299,227 @@ export default function AppClient({
           onSave={saveFilter}
         />
       )}
+
+      {showOnboarding && (
+        <OnboardingWizard
+          onSkip={() => setShowOnboarding(false)}
+          onComplete={async (data) => {
+            await saveFilter(data);
+            setShowOnboarding(false);
+          }}
+        />
+      )}
     </main>
+  );
+}
+
+function OnboardingWizard({
+  onSkip,
+  onComplete,
+}: {
+  onSkip: () => void;
+  onComplete: (data: Partial<Filter>) => Promise<void>;
+}) {
+  const [step, setStep] = useState(1);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [regions, setRegions] = useState<string[]>([]);
+  const [priceRange, setPriceRange] = useState<"small" | "mid" | "big" | "any">("any");
+
+  const CATEGORIES = [
+    { id: "строительство", label: "🏗 Строительство", emoji: "" },
+    { id: "ремонт", label: "🔧 Ремонт", emoji: "" },
+    { id: "поставка", label: "📦 Поставка товаров", emoji: "" },
+    { id: "ит", label: "💻 IT и ПО", emoji: "" },
+    { id: "услуги", label: "🛠 Услуги", emoji: "" },
+    { id: "проектирование", label: "📐 Проектирование", emoji: "" },
+  ];
+
+  const REGIONS = [
+    "Алматы", "Астана", "Шымкент", "Караганда",
+    "Актобе", "Атырау", "ВКО", "По всему Казахстану",
+  ];
+
+  function toggle<T>(arr: T[], v: T): T[] {
+    return arr.includes(v) ? arr.filter(x => x !== v) : [...arr, v];
+  }
+
+  function complete() {
+    let min = 0, max = 1_000_000_000;
+    if (priceRange === "small") { max = 10_000_000; }
+    else if (priceRange === "mid") { min = 10_000_000; max = 100_000_000; }
+    else if (priceRange === "big") { min = 100_000_000; }
+    const allKz = regions.includes("По всему Казахстану");
+    onComplete({
+      name: "Мой первый фильтр",
+      categories,
+      regions: allKz ? [] : regions,
+      platforms: [],
+      keywords: "",
+      min_price: min,
+      max_price: max,
+      enabled: true,
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl rounded-2xl border border-slate-800 p-8 text-slate-100"
+        style={{ background: "#131a2b" }}>
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex gap-1.5">
+            {[1, 2, 3].map(i => (
+              <div key={i} className={`h-1.5 rounded-full transition-all ${
+                i < step ? "w-8 bg-blue-500" : i === step ? "w-12 bg-blue-500" : "w-8 bg-slate-700"
+              }`} />
+            ))}
+          </div>
+          <button onClick={onSkip} className="text-xs text-slate-500 hover:text-slate-300">
+            Пропустить →
+          </button>
+        </div>
+
+        {step === 1 && (
+          <>
+            <h2 className="text-2xl font-bold mb-2">Что вас интересует?</h2>
+            <p className="text-sm text-slate-400 mb-6">Можно выбрать несколько. Изменить — в любой момент.</p>
+            <div className="grid grid-cols-2 gap-3 mb-7">
+              {CATEGORIES.map(c => (
+                <button
+                  key={c.id}
+                  onClick={() => setCategories(toggle(categories, c.id))}
+                  className={`p-4 rounded-xl border text-left transition-all ${
+                    categories.includes(c.id)
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-slate-800 hover:border-slate-600"
+                  }`}>
+                  <div className="font-medium">{c.label}</div>
+                </button>
+              ))}
+            </div>
+            <button
+              disabled={categories.length === 0}
+              onClick={() => setStep(2)}
+              className="w-full py-3 rounded-lg bg-blue-500 hover:bg-blue-400 disabled:opacity-30 disabled:cursor-not-allowed font-semibold">
+              Дальше →
+            </button>
+          </>
+        )}
+
+        {step === 2 && (
+          <>
+            <h2 className="text-2xl font-bold mb-2">В каких регионах работаете?</h2>
+            <p className="text-sm text-slate-400 mb-6">Будем показывать тендера только там, где они вам нужны.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-7">
+              {REGIONS.map(r => (
+                <button
+                  key={r}
+                  onClick={() => setRegions(
+                    r === "По всему Казахстану"
+                      ? (regions.includes(r) ? [] : [r])
+                      : toggle(regions.filter(x => x !== "По всему Казахстану"), r)
+                  )}
+                  className={`p-3 rounded-xl border text-sm transition-all ${
+                    regions.includes(r)
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-slate-800 hover:border-slate-600"
+                  }`}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setStep(1)} className="px-4 py-3 rounded-lg border border-slate-700">←</button>
+              <button
+                disabled={regions.length === 0}
+                onClick={() => setStep(3)}
+                className="flex-1 py-3 rounded-lg bg-blue-500 hover:bg-blue-400 disabled:opacity-30 font-semibold">
+                Дальше →
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === 3 && (
+          <>
+            <h2 className="text-2xl font-bold mb-2">Размер интересующих лотов?</h2>
+            <p className="text-sm text-slate-400 mb-6">Чтобы не показывать слишком мелкие или слишком крупные.</p>
+            <div className="space-y-2 mb-7">
+              {[
+                { id: "small", label: "До 10 млн ₸", desc: "Маленькие лоты для ИП и микро" },
+                { id: "mid",   label: "10–100 млн ₸", desc: "Типичный объём МСБ" },
+                { id: "big",   label: "От 100 млн ₸", desc: "Крупные проекты" },
+                { id: "any",   label: "Любые", desc: "Покажем все, отфильтруетесь сами" },
+              ].map(opt => (
+                <button
+                  key={opt.id}
+                  onClick={() => setPriceRange(opt.id as never)}
+                  className={`w-full p-4 rounded-xl border text-left transition-all ${
+                    priceRange === opt.id
+                      ? "border-blue-500 bg-blue-500/10"
+                      : "border-slate-800 hover:border-slate-600"
+                  }`}>
+                  <div className="font-medium">{opt.label}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setStep(2)} className="px-4 py-3 rounded-lg border border-slate-700">←</button>
+              <button
+                onClick={complete}
+                className="flex-1 py-3 rounded-lg bg-blue-500 hover:bg-blue-400 font-semibold">
+                ✨ Готово — показать лоты
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ChannelsTab() {
+  const [notified, setNotified] = useState(false);
+  return (
+    <div className="rounded-2xl border border-slate-800 p-8" style={{ background: "#131a2b" }}>
+      <div className="max-w-xl">
+        <h3 className="text-xl font-semibold mb-2">Уведомления о новых лотах</h3>
+        <p className="text-sm text-slate-400 mb-6">
+          Скоро вы сможете получать свежие лоты под ваши фильтры в Telegram, на email
+          и в WhatsApp (Enterprise). Сейчас лоты доступны во вкладке «Мои лоты» —
+          обновляются автоматически.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          {[
+            { icon: "📱", name: "Telegram", desc: "Мгновенные уведомления", soon: true },
+            { icon: "✉️", name: "Email", desc: "Ежедневная подборка", soon: true },
+            { icon: "💬", name: "WhatsApp", desc: "Enterprise", soon: true },
+          ].map((c) => (
+            <div key={c.name} className="rounded-xl border border-slate-700 p-4 opacity-70">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-xl">{c.icon}</span>
+                <b>{c.name}</b>
+              </div>
+              <div className="text-xs text-slate-500">{c.desc}</div>
+              <div className="text-[10px] text-slate-600 mt-2 uppercase tracking-wide">Скоро</div>
+            </div>
+          ))}
+        </div>
+
+        {!notified ? (
+          <button
+            onClick={() => setNotified(true)}
+            className="px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-400 font-medium text-sm">
+            Сообщить, когда заработает
+          </button>
+        ) : (
+          <div className="text-sm text-green-400">
+            ✅ Спасибо! Сообщим на email, как только канал заработает.
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
